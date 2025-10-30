@@ -7,6 +7,8 @@ import (
 	"syscall"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/savisitor15/go-peril-bootdev/internal/pubsub"
+	"github.com/savisitor15/go-peril-bootdev/internal/routing"
 )
 
 func main() {
@@ -28,7 +30,15 @@ func main() {
 		fmt.Println(sig)
 		done <- true
 	}()
-
+	// open a channel
+	rabbitChan, err := rabbitConn.Channel()
+	if err != nil {
+		fmt.Println(fmt.Errorf("error creating connetion: %w", err))
+	}
+	err = pubsub.PublishJSON(rabbitChan, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: true})
+	if err != nil {
+		fmt.Println(fmt.Errorf("error creating connetion: %w", err))
+	}
 	fmt.Println("awaiting signal")
 	<-done
 	fmt.Println("exiting")
