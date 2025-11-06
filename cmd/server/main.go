@@ -20,6 +20,7 @@ func main() {
 	}
 	defer rabbitConn.Close()
 	fmt.Printf("connection esstablished to %s \n", rabbitHost)
+	// wait for a signal before terminating
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	done := make(chan bool, 1)
