@@ -2,46 +2,68 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
+	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/savisitor15/go-peril-bootdev/internal/gamelogic"
 	"github.com/savisitor15/go-peril-bootdev/internal/pubsub"
 	"github.com/savisitor15/go-peril-bootdev/internal/routing"
 )
 
 func main() {
-	fmt.Println("Starting Peril server...")
+	log.Println("Starting Peril server...")
 	rabbitHost := "amqp://guest:guest@localhost:5672/"
 	rabbitConn, err := amqp.Dial(rabbitHost)
 	if err != nil {
-		fmt.Println(fmt.Errorf("error creating connetion: %w", err))
+		log.Fatalf("error creating connetion: %v", err)
 	}
 	defer rabbitConn.Close()
-	fmt.Printf("connection esstablished to %s \n", rabbitHost)
-	// wait for a signal before terminating
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	done := make(chan bool, 1)
-	go func() {
-
-		sig := <-sigs
-		fmt.Println()
-		fmt.Println(sig)
-		done <- true
-	}()
+	log.Printf("connection esstablished to %s \n", rabbitHost)
 	// open a channel
 	rabbitChan, err := rabbitConn.Channel()
 	if err != nil {
-		fmt.Println(fmt.Errorf("error creating connetion: %w", err))
+		log.Fatalf("error creating connetion: %v", err)
 	}
-	err = pubsub.PublishJSON(rabbitChan, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: true})
-	if err != nil {
-		fmt.Println(fmt.Errorf("error creating connetion: %w", err))
-	}
-	fmt.Println("awaiting signal")
-	<-done
-	fmt.Println("exiting")
+	// Print help
+	gamelogic.PrintServerHelp()
 
+	for {
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+		switch words[0] {
+		case "pause":
+			fmt.Println("Publishing paused game state")
+			err = pubsub.PublishJSON(
+				rabbitChan,
+				routing.ExchangePerilDirect,
+				routing.PauseKey,
+				routing.PlayingState{
+					IsPaused: true,
+				},
+			)
+			if err != nil {
+				log.Printf("could not publish pause state: %v", err)
+			}
+		case "resume":
+			fmt.Println("publishing resumes game state")
+			err = pubsub.PublishJSON(
+				rabbitChan,
+				routing.ExchangePerilDirect,
+				routing.PauseKey,
+				routing.PlayingState{
+					IsPaused: false,
+				},
+			)
+			if err != nil {
+				log.Printf("could not publish pause state: %v", err)
+			}
+		case "quit":
+			log.Println("goodbye")
+		default:
+			fmt.Printf("unkown command")
+			return
+		}
+	}
 }
