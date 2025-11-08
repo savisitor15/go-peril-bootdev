@@ -61,9 +61,9 @@ func main() {
 			}
 		case "quit":
 			log.Println("goodbye")
+			return
 		default:
 			fmt.Printf("unkown command")
-			return
 		}
 	}
 }

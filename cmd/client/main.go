@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	gamelogic "github.com/savisitor15/go-peril-bootdev/internal/gamelogic"
@@ -39,9 +37,36 @@ func main() {
 		log.Fatalf("could not subscribe to pause: %v", err)
 	}
 	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
-	// wait for ctrl+c
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
-	<-signalChan
-	fmt.Println("RabbitMQ connection closed.")
+
+	state := gamelogic.NewGameState(username)
+
+	for {
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+		switch words[0] {
+		case "spawn":
+			err = state.CommandSpawn(words)
+			if err != nil {
+				fmt.Printf("error completing spawn command: %v", err)
+				continue
+			}
+		case "move":
+			army, err := state.CommandMove(words)
+			if err != nil {
+				fmt.Printf("error completing move command: %v", err)
+			}
+			log.Printf("Army of %v, with units %v moved to %v", army.Player.Username, army.Units[0].Rank, army.ToLocation)
+		case "status":
+			state.CommandStatus()
+		case "help":
+			gamelogic.PrintClientHelp()
+		case "quit":
+			gamelogic.PrintQuit()
+			return
+		default:
+			fmt.Printf("unkown command")
+		}
+	}
 }
