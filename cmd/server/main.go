@@ -24,6 +24,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating connetion: %v", err)
 	}
+	// log queue declare and bind
+	_, logqueue, err := pubsub.DeclareAndBind(
+		rabbitConn,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		routing.GameLogSlug+".*",
+		pubsub.SimpleQueueDurable,
+	)
+	if err != nil {
+		log.Fatalf("error binding to game_logs queue: %v", err)
+	}
+	log.Printf("Queue %v declared and bound.", logqueue.Name)
+
 	// Print help
 	gamelogic.PrintServerHelp()
 
