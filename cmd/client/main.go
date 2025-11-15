@@ -25,20 +25,20 @@ func main() {
 		log.Fatalf("error getting username: %v", err)
 	}
 	fmt.Println("Welcome ", username)
+	// Create the game state for this client
+	state := gamelogic.NewGameState(username)
 
-	_, queue, err := pubsub.DeclareAndBind(
+	err = pubsub.SubscribeJSON(
 		rabbitConn,
 		routing.ExchangePerilDirect,
-		routing.PauseKey+"."+username,
+		routing.PauseKey+"."+state.GetUsername(),
 		routing.PauseKey,
 		pubsub.SimpleQueueTransient,
+		handlerPause(state),
 	)
 	if err != nil {
 		log.Fatalf("could not subscribe to pause: %v", err)
 	}
-	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
-
-	state := gamelogic.NewGameState(username)
 
 	for {
 		words := gamelogic.GetInput()
@@ -49,15 +49,16 @@ func main() {
 		case "spawn":
 			err = state.CommandSpawn(words)
 			if err != nil {
-				fmt.Printf("error completing spawn command: %v", err)
+				fmt.Printf("error completing spawn command: %v\n", err)
 				continue
 			}
 		case "move":
 			army, err := state.CommandMove(words)
 			if err != nil {
-				fmt.Printf("error completing move command: %v", err)
+				fmt.Printf("error completing move command: %v\n", err)
+				continue
 			}
-			log.Printf("Army of %v, with units %v moved to %v", army.Player.Username, army.Units[0].Rank, army.ToLocation)
+			log.Printf("Army of %v, with units %v moved to %v\n", army.Player.Username, army.Units[0].Rank, army.ToLocation)
 		case "status":
 			state.CommandStatus()
 		case "help":
