@@ -29,19 +29,26 @@ func DeclareAndBind(
 	queueName,
 	key string,
 	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
-) (*amqp.Channel, amqp.Queue, error) {
+	deadLetter bool) (*amqp.Channel, amqp.Queue, error) {
 	ch, err := conn.Channel()
 	if err != nil {
 		return nil, amqp.Queue{}, fmt.Errorf("could not create channel %v", err)
 	}
-
+	var deadLetterTable amqp.Table
+	if deadLetter {
+		deadLetterTable = amqp.Table{
+			"x-dead-letter-exchange": "peril_dlx",
+		}
+	} else {
+		deadLetterTable = nil
+	}
 	queue, err := ch.QueueDeclare(
 		queueName,
 		queueType == SimpleQueueDurable, // check if durable
 		queueType != SimpleQueueDurable, // delete if not used
 		queueType != SimpleQueueDurable, // exclusive mode?
 		false,                           // R-T/ no-wait
-		nil,                             // no args
+		deadLetterTable,                 // dead-letter-queue
 	)
 	if err != nil {
 		return nil, amqp.Queue{}, fmt.Errorf("could not declare queue %v", err)
@@ -66,6 +73,7 @@ func SubscribeJSON[T any](
 	queueName,
 	key string,
 	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
+	deadLetter bool,
 	handler func(T) Acktype,
 ) error {
 	ch, queue, err := DeclareAndBind(
@@ -74,7 +82,7 @@ func SubscribeJSON[T any](
 		queueName,
 		key,
 		queueType,
-	)
+		deadLetter)
 	if err != nil {
 		return fmt.Errorf("could not declare and bind queue: %v", err)
 	}

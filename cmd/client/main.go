@@ -39,6 +39,7 @@ func main() {
 		routing.PauseKey+"."+state.GetUsername(),
 		routing.PauseKey,
 		pubsub.SimpleQueueTransient,
+		true,
 		handlerPause(state),
 	)
 	if err != nil {
@@ -51,6 +52,7 @@ func main() {
 		routing.ArmyMovesPrefix+"."+state.GetUsername(),
 		routing.ArmyMovesPrefix+".*",
 		pubsub.SimpleQueueTransient,
+		true,
 		handlerMove(state),
 	)
 	if err != nil {
