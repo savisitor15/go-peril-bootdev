@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/savisitor15/go-peril-bootdev/internal/gamelogic"
 	"github.com/savisitor15/go-peril-bootdev/internal/pubsub"
 	"github.com/savisitor15/go-peril-bootdev/internal/routing"
@@ -12,21 +13,58 @@ func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) pubsub.Ack
 	return func(ps routing.PlayingState) pubsub.Acktype {
 		defer fmt.Printf("> ")
 		gs.HandlePause(ps)
-		return pubsub.AckTypeAck
+		return pubsub.Ack
 	}
 }
 
-func handlerMove(gs *gamelogic.GameState) func(gamelogic.ArmyMove) pubsub.Acktype {
+func handlerMove(gs *gamelogic.GameState, publishCh *amqp.Channel) func(gamelogic.ArmyMove) pubsub.Acktype {
 	return func(mv gamelogic.ArmyMove) pubsub.Acktype {
 		defer fmt.Printf("> ")
 		outcome := gs.HandleMove(mv)
 		switch outcome {
-		case gamelogic.MoveOutComeSafe, gamelogic.MoveOutcomeMakeWar:
-			return pubsub.AckTypeAck
 		case gamelogic.MoveOutcomeSamePlayer:
-			return pubsub.AckTypeNackDiscard
+			return pubsub.Ack
+		case gamelogic.MoveOutComeSafe:
+			return pubsub.Ack
+		case gamelogic.MoveOutcomeMakeWar:
+			err := pubsub.PublishJSON(
+				publishCh,
+				routing.ExchangePerilTopic,
+				routing.WarRecognitionsPrefix+"."+gs.GetUsername(),
+				gamelogic.RecognitionOfWar{
+					Attacker: mv.Player,
+					Defender: gs.GetPlayerSnap(),
+				},
+			)
+			if err != nil {
+				fmt.Printf("error: %s\n", err)
+				return pubsub.NackRequeue
+			}
+			return pubsub.Ack
 		default:
-			return pubsub.AckTypeNackDiscard
+			fmt.Printf("error: unkown move outcome")
+			return pubsub.NackDiscard
 		}
+	}
+}
+
+func handlerWar(gs *gamelogic.GameState) func(dw gamelogic.RecognitionOfWar) pubsub.Acktype {
+	return func(dw gamelogic.RecognitionOfWar) pubsub.Acktype {
+		defer fmt.Print("> ")
+		waroutcome, _, _ := gs.HandleWar(dw)
+		switch waroutcome {
+		case gamelogic.WarOutcomeNotInvolved:
+			return pubsub.NackRequeue
+		case gamelogic.WarOutcomeNoUnits:
+			return pubsub.NackDiscard
+		case gamelogic.WarOutcomeOpponentWon:
+			return pubsub.Ack
+		case gamelogic.WarOutcomeYouWon:
+			return pubsub.Ack
+		case gamelogic.WarOutcomeDraw:
+			return pubsub.Ack
+		}
+		fmt.Printf("error: nkown war outcome")
+		return pubsub.NackDiscard
 	}
 }

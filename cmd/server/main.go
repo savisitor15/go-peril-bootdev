@@ -31,7 +31,7 @@ func main() {
 		routing.GameLogSlug,
 		routing.GameLogSlug+".*",
 		pubsub.SimpleQueueDurable,
-		false)
+	)
 	if err != nil {
 		log.Fatalf("error binding to game_logs queue: %v", err)
 	}

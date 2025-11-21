@@ -3,7 +3,6 @@ package pubsub
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -11,9 +10,9 @@ import (
 type Acktype int
 
 const (
-	AckTypeAck Acktype = iota
-	AckTypeNackRequeue
-	AckTypeNackDiscard
+	Ack Acktype = iota
+	NackRequeue
+	NackDiscard
 )
 
 type SimpleQueueType int
@@ -29,18 +28,10 @@ func DeclareAndBind(
 	queueName,
 	key string,
 	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
-	deadLetter bool) (*amqp.Channel, amqp.Queue, error) {
+) (*amqp.Channel, amqp.Queue, error) {
 	ch, err := conn.Channel()
 	if err != nil {
 		return nil, amqp.Queue{}, fmt.Errorf("could not create channel %v", err)
-	}
-	var deadLetterTable amqp.Table
-	if deadLetter {
-		deadLetterTable = amqp.Table{
-			"x-dead-letter-exchange": "peril_dlx",
-		}
-	} else {
-		deadLetterTable = nil
 	}
 	queue, err := ch.QueueDeclare(
 		queueName,
@@ -48,7 +39,9 @@ func DeclareAndBind(
 		queueType != SimpleQueueDurable, // delete if not used
 		queueType != SimpleQueueDurable, // exclusive mode?
 		false,                           // R-T/ no-wait
-		deadLetterTable,                 // dead-letter-queue
+		amqp.Table{
+			"x-dead-letter-exchange": "peril_dlx",
+		}, // dead-letter-queue
 	)
 	if err != nil {
 		return nil, amqp.Queue{}, fmt.Errorf("could not declare queue %v", err)
@@ -73,7 +66,6 @@ func SubscribeJSON[T any](
 	queueName,
 	key string,
 	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
-	deadLetter bool,
 	handler func(T) Acktype,
 ) error {
 	ch, queue, err := DeclareAndBind(
@@ -82,7 +74,7 @@ func SubscribeJSON[T any](
 		queueName,
 		key,
 		queueType,
-		deadLetter)
+	)
 	if err != nil {
 		return fmt.Errorf("could not declare and bind queue: %v", err)
 	}
@@ -108,20 +100,16 @@ func SubscribeJSON[T any](
 			}
 			ret := handler(target)
 			switch ret {
-			case AckTypeAck:
+			case Ack:
 				msg.Ack(false)
-				log.Printf("message: %v Acknowledged", msg.AppId)
-			case AckTypeNackRequeue:
+				fmt.Println("Ack")
+			case NackRequeue:
 				msg.Nack(false, true)
-				log.Printf("message: %v Neg Acknowledge, requeued", msg.AppId)
-			case AckTypeNackDiscard:
+				fmt.Println("NackRequeue")
+			case NackDiscard:
 				msg.Nack(false, false)
-				log.Printf("message: %v Neg Acknowledge, discarded", msg.AppId)
-			default:
-				msg.Nack(false, false)
-				log.Printf("message: %v resulted in an unexpected status: %v", msg.AppId, ret)
+				fmt.Println("NackDiscard")
 			}
-			msg.Ack(false)
 		}
 	}()
 	return nil

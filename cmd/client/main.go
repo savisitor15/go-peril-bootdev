@@ -39,7 +39,6 @@ func main() {
 		routing.PauseKey+"."+state.GetUsername(),
 		routing.PauseKey,
 		pubsub.SimpleQueueTransient,
-		true,
 		handlerPause(state),
 	)
 	if err != nil {
@@ -52,13 +51,22 @@ func main() {
 		routing.ArmyMovesPrefix+"."+state.GetUsername(),
 		routing.ArmyMovesPrefix+".*",
 		pubsub.SimpleQueueTransient,
-		true,
-		handlerMove(state),
+		handlerMove(state, publishCh),
 	)
 	if err != nil {
 		log.Fatalf("could not subscribe to move queue: %v", err)
 	}
-
+	err = pubsub.SubscribeJSON(
+		rabbitConn,
+		routing.ExchangePerilTopic,
+		routing.WarRecognitionsPrefix,
+		routing.WarRecognitionsPrefix+".*",
+		pubsub.SimpleQueueDurable,
+		handlerWar(state),
+	)
+	if err != nil {
+		log.Fatalf("could not subscribe to war queue: %v", err)
+	}
 	for {
 		words := gamelogic.GetInput()
 		if len(words) == 0 {
