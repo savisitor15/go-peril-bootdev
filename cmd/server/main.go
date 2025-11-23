@@ -25,17 +25,18 @@ func main() {
 		log.Fatalf("error creating connetion: %v", err)
 	}
 	// log queue declare and bind
-	_, logqueue, err := pubsub.DeclareAndBind(
+	err = pubsub.SubscribeGob(
 		rabbitConn,
 		routing.ExchangePerilTopic,
 		routing.GameLogSlug,
 		routing.GameLogSlug+".*",
 		pubsub.SimpleQueueDurable,
+		handlerLogs(),
 	)
+
 	if err != nil {
-		log.Fatalf("error binding to game_logs queue: %v", err)
+		log.Fatalf("error could not subscribe to logs queue: %v", err)
 	}
-	log.Printf("Queue %v declared and bound.", logqueue.Name)
 
 	// Print help
 	gamelogic.PrintServerHelp()
@@ -76,7 +77,7 @@ func main() {
 			log.Println("goodbye")
 			return
 		default:
-			fmt.Printf("unkown command")
+			fmt.Println("unkown command")
 		}
 	}
 }

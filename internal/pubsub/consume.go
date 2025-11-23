@@ -1,6 +1,8 @@
 package pubsub
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 
@@ -68,12 +70,61 @@ func SubscribeJSON[T any](
 	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
 	handler func(T) Acktype,
 ) error {
-	ch, queue, err := DeclareAndBind(
+	return subscribe(
 		conn,
 		exchange,
 		queueName,
 		key,
 		queueType,
+		handler,
+		func(data []byte) (T, error) {
+			var payload T
+			err := json.Unmarshal(data, &payload)
+			return payload, err
+		},
+	)
+}
+
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
+	handler func(T) Acktype,
+) error {
+	err := subscribe(conn,
+		exchange,
+		queueName,
+		key,
+		queueType,
+		handler,
+		func(data []byte) (T, error) {
+			buffer := bytes.NewBuffer(data)
+			decoder := gob.NewDecoder(buffer)
+			var target T
+			err := decoder.Decode(&target)
+			return target, err
+
+		})
+	return err
+}
+
+func subscribe[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	simpleQueueType SimpleQueueType,
+	handler func(T) Acktype,
+	unmarshaller func([]byte) (T, error),
+) error {
+	ch, queue, err := DeclareAndBind(
+		conn,
+		exchange,
+		queueName,
+		key,
+		simpleQueueType,
 	)
 	if err != nil {
 		return fmt.Errorf("could not declare and bind queue: %v", err)
@@ -82,12 +133,6 @@ func SubscribeJSON[T any](
 	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("could not consume messages: %v", err)
-	}
-
-	unmarshaller := func(data []byte) (T, error) {
-		var payload T
-		err := json.Unmarshal(data, &payload)
-		return payload, err
 	}
 
 	go func() {
@@ -102,13 +147,10 @@ func SubscribeJSON[T any](
 			switch ret {
 			case Ack:
 				msg.Ack(false)
-				fmt.Println("Ack")
 			case NackRequeue:
 				msg.Nack(false, true)
-				fmt.Println("NackRequeue")
 			case NackDiscard:
 				msg.Nack(false, false)
-				fmt.Println("NackDiscard")
 			}
 		}
 	}()
