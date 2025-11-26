@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -97,6 +98,25 @@ func main() {
 				continue
 			}
 			log.Printf("moved %v units to %v\n", len(mv.Units), len(mv.ToLocation))
+		case "spam":
+			if len(words) < 2 {
+				fmt.Printf("usage: spam [n] \nexample: spam 5\n")
+				continue
+			}
+			n, err := strconv.Atoi(words[1])
+			if err != nil {
+				fmt.Printf("error: converting n to int: %v\n", err)
+				continue
+			}
+			for n > 0 {
+				n = n - 1
+				err = publishGameLog(publishCh, state.GetUsername(), gamelogic.GetMaliciousLog())
+				if err != nil {
+					fmt.Printf("error: publishing log: %v\n", err)
+					break
+				}
+			}
+
 		case "status":
 			state.CommandStatus()
 		case "help":
@@ -105,7 +125,7 @@ func main() {
 			gamelogic.PrintQuit()
 			return
 		default:
-			fmt.Printf("unkown command")
+			fmt.Println("unkown command")
 		}
 	}
 }
